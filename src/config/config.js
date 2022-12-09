@@ -8,6 +8,11 @@ const envVarsSchema = Joi.object()
   .keys({
     NODE_ENV: Joi.string().valid('production', 'development', 'test').required(),
     PORT: Joi.number().default(3000),
+    MYSQL_HOST: Joi.string().required().description('MYSQL_HOST'),
+    MYSQL_PORT: Joi.string().required().description('MYSQL_PORT'),
+    MYSQL_DATABASE: Joi.string().required().description('MYSQL_DATABASE'),
+    MYSQL_USERNAME: Joi.string().required().description('MYSQL_USERNAME'),
+    MYSQL_PASSWORD: Joi.string().allow(null, '').description('MYSQL_PASSWORD'),
     MONGODB_URL: Joi.string().required().description('Mongo DB url'),
     JWT_SECRET: Joi.string().required().description('JWT secret key'),
     JWT_ACCESS_EXPIRATION_MINUTES: Joi.number().default(30).description('minutes after which access tokens expire'),
@@ -35,6 +40,19 @@ if (error) {
 module.exports = {
   env: envVars.NODE_ENV,
   port: envVars.PORT,
+  mysql: {
+    host: `${envVars.MYSQL_HOST}`,
+    database: envVars.MYSQL_DATABASE,
+    username: envVars.MYSQL_USERNAME,
+    password: envVars.MYSQL_PASSWORD,
+    dialect: 'mysql',
+    pool: {
+        max: 5,
+        min: 0,
+        acquire: 30000,
+        idle: 10000,
+    },
+  },
   mongoose: {
     url: envVars.MONGODB_URL + (envVars.NODE_ENV === 'test' ? '-test' : ''),
     options: {

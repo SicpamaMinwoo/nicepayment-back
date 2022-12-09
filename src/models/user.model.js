@@ -1,91 +1,110 @@
-const mongoose = require('mongoose');
-const validator = require('validator');
+const { Model, Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
-const { toJSON, paginate } = require('./plugins');
-const { roles } = require('../config/roles');
 
-const userSchema = mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      lowercase: true,
-      validate(value) {
-        if (!validator.isEmail(value)) {
-          throw new Error('Invalid email');
+module.exports = (sequelize, DataTypes) => {
+    class Users extends Model {
+        /**
+         * Helper method for defining associations.
+         * This method is not a part of Sequelize lifecycle.
+         * The `models/index` file will call this method automatically.
+         */
+        static associate(models) {
+            // define association here
         }
-      },
-    },
-    password: {
-      type: String,
-      required: true,
-      trim: true,
-      minlength: 8,
-      validate(value) {
-        if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
-          throw new Error('Password must contain at least one letter and one number');
+    }
+    Users.init(
+        {
+            id: {
+                autoIncrement: true,
+                type: DataTypes.INTEGER,
+                allowNull: false,
+                primaryKey: true,
+            },
+            nickname: {
+                type: DataTypes.STRING,
+            },
+            gender: {
+                type: DataTypes.STRING,
+            },
+            password: {
+                type: DataTypes.STRING(300),
+            },
+            payment_password: {
+                allowNull: true,
+                type: DataTypes.STRING(300),
+            },
+            name: {
+                type: DataTypes.STRING(200),
+            },
+            email: {
+                type: DataTypes.STRING(300),
+                validate: {
+                    isEmail: true,
+                },
+            },
+            phone_code: {
+                type: DataTypes.STRING(10),
+            },
+            phone_number: {
+                type: DataTypes.STRING(20),
+            },
+            date_of_birth: {
+                type: DataTypes.DATEONLY,
+            },
+            profile_photo: {
+                type: DataTypes.STRING(2000),
+            },
+            visiting_count: {
+                type: DataTypes.INTEGER,
+            },
+            created_at: {
+                allowNull: false,
+                type: 'TIMESTAMP',
+            },
+            updated_at: {
+                allowNull: false,
+                type: 'TIMESTAMP',
+                defaultValue: DataTypes.NOW,
+            },
+            deleted_at: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
+        },
+        {
+            sequelize,
+            modelName: 'Users',
+            tableName: 'users',
+            timestamps: true,
+            createdAt: 'created_at',
+            updatedAt: 'updated_at',
+            paranoid: true,
+            deletedAt: 'deleted_at',
+            defaultScope: {
+                attributes: { exclude: ['password', 'payment_password'] },
+            },
         }
-      },
-      private: true, // used by the toJSON plugin
-    },
-    role: {
-      type: String,
-      enum: roles,
-      default: 'user',
-    },
-    isEmailVerified: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+    );
 
-// add plugin that converts mongoose to json
-userSchema.plugin(toJSON);
-userSchema.plugin(paginate);
+    // Hook
+    Users.beforeCreate(async (customer) => {
+        const hashedPassword = await bcrypt.hash(customer.password, 8);
+        customer.password = hashedPassword;
+    });
 
-/**
- * Check if email is taken
- * @param {string} email - The user's email
- * @param {ObjectId} [excludeUserId] - The id of the user to be excluded
- * @returns {Promise<boolean>}
- */
-userSchema.statics.isEmailTaken = async function (email, excludeUserId) {
-  const user = await this.findOne({ email, _id: { $ne: excludeUserId } });
-  return !!user;
+    // Instance methods
+    Users.isEmailTaken = async function (email, excludeUserId = null) {
+        const customer = await this.findOne({
+            where: [{ email }, { id: { [Op.not]: excludeUserId } }],
+        });
+
+        return !!customer;
+    };
+
+    Users.prototype.isPasswordMatch = async function (password) {
+        const customer = this;
+
+        return bcrypt.compare(password, customer.password);
+    };
+    return Users;
 };
-
-/**
- * Check if password matches the user's password
- * @param {string} password
- * @returns {Promise<boolean>}
- */
-userSchema.methods.isPasswordMatch = async function (password) {
-  const user = this;
-  return bcrypt.compare(password, user.password);
-};
-
-userSchema.pre('save', async function (next) {
-  const user = this;
-  if (user.isModified('password')) {
-    user.password = await bcrypt.hash(user.password, 8);
-  }
-  next();
-});
-
-/**
- * @typedef User
- */
-const User = mongoose.model('User', userSchema);
-
-module.exports = User;
